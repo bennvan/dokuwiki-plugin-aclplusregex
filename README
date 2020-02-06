@@ -1,6 +1,6 @@
 aclplusregex Plugin for DokuWiki
 
-Show group membership and other user data in an overview table
+Dynamically extend DokuWiki ACLs based on regular expressions
 
 All documentation for this plugin can be found at
 https://www.dokuwiki.org/plugin:aclplusregex
