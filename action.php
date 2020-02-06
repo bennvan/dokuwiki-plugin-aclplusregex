@@ -71,9 +71,9 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
             list($id, $pattern, $perm) = preg_split('/[ \t]+/', $line, 3);
 
             if ($pattern[0] !== '@') {
-                $extraLines[] = $this->match($pattern, [$user], $line);
+                $extraLines[] = $this->match($pattern, $user, [$user], $line);
             } elseif ($pattern[0] === '@') {
-                $extraLines[] = $this->match($pattern, $groups, $line);
+                $extraLines[] = $this->match($pattern, $user, $groups, $line);
             }
         }
 
@@ -84,19 +84,18 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
      * One match per config line is enough, more rules would be redundant.
      *
      * @param string $pattern
+     * @param string $user
      * @param array $subjects
      * @param string $line
      * @return string
      */
-    protected function match($pattern, $subjects, $line)
+    protected function match($pattern, $user, $subjects, $line)
     {
-        $subjects = $this->encodeNames($subjects);
-
         foreach ($subjects as $subject) {
             $cnt = 0;
             $extra = preg_replace(
                 '!' . $pattern . '!',
-                str_replace($pattern, $subject, $line),
+                str_replace($pattern, auth_nameencode($user), $line), // set permissions for the user, never the group
                 $subject,
                 1,
                 $cnt
@@ -106,21 +105,5 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
             }
         }
         return '';
-    }
-
-    /**
-     * Encode user and group names.
-     * The names in acl.auth.php are already encoded, but not in our config, for convenience's sake.
-     *
-     * @param $subjects
-     * @return array
-     */
-    protected function encodeNames($subjects)
-    {
-        return array_map(function ($subject) {
-            return $subject[0] !== '@' ?
-                auth_nameencode($subject) :
-                '@' . auth_nameencode(substr($subject, 1));
-        }, $subjects);
     }
 }

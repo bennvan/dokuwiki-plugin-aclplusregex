@@ -16,7 +16,7 @@ class helper_plugin_aclplusregex_test extends DokuWikiTest
      *      user,
      *      [user groups],
      *      [plugin configuration lines],
-     *      [expected new ACLs]
+     *      [expected resulting ACLs]
      * ]
      *
      * @return array
@@ -30,12 +30,12 @@ class helper_plugin_aclplusregex_test extends DokuWikiTest
                     '987654_matching',
                 ],
                 [
-                    'customers:$1:*	@(\d{6}).*	4',
-                    'customers:$1:secret:*	@(\d{6}).*	0',
+                    'customers:$1:*	@(\d{6})_.*	4',
+                    'customers:$1:secret:*	@(\d{6})_.*	0',
                 ],
                 [
-                    'customers:987654:*	@987654%5fmatching	4',
-                    'customers:987654:secret:*	@987654%5fmatching	0',
+                    'customers:987654:*	user%5fname	4',
+                    'customers:987654:secret:*	user%5fname	0',
                 ],
             ],
             [
@@ -44,7 +44,7 @@ class helper_plugin_aclplusregex_test extends DokuWikiTest
                     'non-matching-group',
                 ],
                 [
-                    'customers:$1:*	(\d{6}).*	8',
+                    'customers:$1:*	(\d{6})_.*	8',
                 ],
                 [
                     'customers:123456:*	123456%5fuser	8',
