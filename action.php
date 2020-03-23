@@ -71,9 +71,9 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
             list($id, $pattern, $perm) = preg_split('/[ \t]+/', $line, 3);
 
             if ($pattern[0] !== '@') {
-                $extraLines[] = $this->match($pattern, $user, [$user], $line);
+                $extraLines = array_merge($extraLines, $this->match($pattern, $user, [$user], $line));
             } elseif ($pattern[0] === '@') {
-                $extraLines[] = $this->match($pattern, $user, $groups, $line);
+                $extraLines = array_merge($extraLines, $this->match($pattern, $user, $groups, $line));
             }
         }
 
@@ -81,16 +81,17 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
     }
 
     /**
-     * One match per config line is enough, more rules would be redundant.
+     * Returns as many rules as there are pattern matches
      *
      * @param string $pattern
      * @param string $user
      * @param array $subjects
      * @param string $line
-     * @return string
+     * @return array
      */
     protected function match($pattern, $user, $subjects, $line)
     {
+        $extras = [];
         foreach ($subjects as $subject) {
             $cnt = 0;
             $extra = preg_replace(
@@ -100,10 +101,8 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
                 1,
                 $cnt
             );
-            if ($cnt > 0) {
-                return $extra;
-            }
+            $extras[] = $extra;
         }
-        return '';
+        return $extras;
     }
 }
