@@ -83,25 +83,33 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
     /**
      * Returns as many rules as there are pattern matches
      *
-     * @param string $pattern
-     * @param string $user
-     * @param array $subjects
-     * @param string $line
+     * @param string $pattern   Regex from config
+     * @param string $user      Current user's name
+     * @param array $properties User properties to check: username or groups
+     * @param string $line      Config line
      * @return array
      */
-    protected function match($pattern, $user, $subjects, $line)
+    protected function match($pattern, $user, $properties, $line)
     {
         $extras = [];
-        foreach ($subjects as $subject) {
+
+        // prepare the line to be added to ACLs if pattern actually matches: substitute username for the pattern already
+        $preparedLine = str_replace($pattern, auth_nameencode($user), $line);
+
+        foreach ($properties as $property) {
             $cnt = 0;
+            // build an extra ACL rule by replacing the placeholders/backreferences in prepared line with captured groups
             $extra = preg_replace(
                 '!' . $pattern . '!',
-                str_replace($pattern, auth_nameencode($user), $line), // set permissions for the user, never the group
-                $subject,
+                $preparedLine,
+                $property,
                 1,
                 $cnt
             );
-            $extras[] = $extra;
+            // add the rule if anything was replaced
+            if ($cnt > 0) {
+                $extras[] = $extra;
+            }
         }
         return $extras;
     }
