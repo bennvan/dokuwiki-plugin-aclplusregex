@@ -28,6 +28,8 @@ class helper_plugin_aclplusregex_test extends DokuWikiTest
                 'user_name',
                 [
                     '987654_matching',
+                    'non-matching-group',
+                    '123456_matching',
                 ],
                 [
                     'customers:$1:*	@(\d{6})_.*	4',
@@ -35,7 +37,9 @@ class helper_plugin_aclplusregex_test extends DokuWikiTest
                 ],
                 [
                     'customers:987654:*	user%5fname	4',
+                    'customers:123456:*	user%5fname	4',
                     'customers:987654:secret:*	user%5fname	0',
+                    'customers:123456:secret:*	user%5fname	0',
                 ],
             ],
             [
