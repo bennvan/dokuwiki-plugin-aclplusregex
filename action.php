@@ -16,7 +16,8 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
      */
     public function register(Doku_Event_Handler $controller)
     {
-        $controller->register_hook('DOKUWIKI_STARTED', 'AFTER', $this, 'handle_acl');
+        $controller->register_hook('AUTH_LOGIN_CHECK', 'AFTER', $this, 'handle_acl');
+
     }
 
     /**
