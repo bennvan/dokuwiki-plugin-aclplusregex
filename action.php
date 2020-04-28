@@ -8,6 +8,14 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
 {
     const CONFFILE = DOKU_CONF . 'aclplusregex.conf';
 
+    /** @var string Regex for the * placeholder */
+    const STAR = '[^:]+';
+    /** @var string Regex for the ** placeholder */
+    const STARS = '[^:]+(:[^:]+)*';
+
+    /** @var array we store the regexes per user here */
+    protected $ruleCache = [];
+
     /**
      * Registers a callback function for a given event
      *
@@ -16,7 +24,8 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
      */
     public function register(Doku_Event_Handler $controller)
     {
-        $controller->register_hook('AUTH_LOGIN_CHECK', 'AFTER', $this, 'handle_acl');
+        $mode = $this->getConf('run');
+        $controller->register_hook('AUTH_ACL_CHECK', $mode, $this, 'handle_acl', $mode);
 
     }
 
@@ -25,93 +34,141 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
      * and adds rules if the current user matches a pattern.
      *
      * @param Doku_Event $event event object by reference
-     * @param $param
+     * @param string $mode BEFORE|AFTER
      * @return void
      */
-    public function handle_acl(Doku_Event $event, $param)
+    public function handle_acl(Doku_Event $event, $mode)
     {
-        if (empty($_SERVER['REMOTE_USER'])) return;
+        $id = $event->data['id'];
+        $user = $event->data['user'];
+        $groups = $event->data['groups'];
 
-        if (!is_file(self::CONFFILE)) {
-            msg('Configuration file for plugin aclplusregex was not found! Your ACLs might be incorrect.');
-            return;
+        if(!isset($this->ruleCache[$user])) {
+            $this->ruleCache[$user] = $this->loadACLRules($user, $groups);
         }
 
-        $extraAcl = file(self::CONFFILE);
-        global $AUTH_ACL, $USERINFO, $INFO;
+        $result = AUTH_NONE;
 
-        $AUTH_ACL = array_merge(
-            $AUTH_ACL,
-            $this->extendAcl($_SERVER['REMOTE_USER'], $USERINFO['grps'], $extraAcl)
-        );
-        // redo auth_quickaclcheck() after manipulating global ACLs
-        $INFO = pageinfo();
+        foreach ($this->loadACLRules($user, $groups) as $perm => $rule) {
+            if(preg_match($rule, $id)) {
+                $result = $perm;
+                break;
+            }
+        }
+
+        if($mode === 'BEFORE') {
+            $event->preventDefault();
+        }
+
+        $event->result = $result;
     }
 
     /**
-     * Returns dynamically adjusted ACL entries if current user matches a pattern in config.
-     * Those will be inserted into global $AUTH_ACL used in permission checks.
+     * Load the custom ACL regexes for the given user
      *
      * @param string $user
-     * @param array $groups
-     * @param array $config
+     * @param string $groups
      * @return array
      */
-    public function extendAcl($user, $groups, $config)
+    public function loadACLRules($user, $groups)
     {
-        $extraLines = [];
+        $entities = $this->createUserGroupEntities($user, $groups);
+        $config = $this->getConfiguration();
 
-        // format names for coming comparisons
-        array_walk($groups, function (&$gr) {
-            $gr = '@' . $gr;
-        });
-
-        foreach($config as $line) {
-            $line = trim($line);
-            if (empty($line) || ($line[0] == '#')) continue; // skip blank lines & comments
-            list($id, $pattern, $perm) = preg_split('/[ \t]+/', $line, 3);
-
-            if ($pattern[0] !== '@') {
-                $extraLines = array_merge($extraLines, $this->match($pattern, $user, [$user], $line));
-            } elseif ($pattern[0] === '@') {
-                $extraLines = array_merge($extraLines, $this->match($pattern, $user, $groups, $line));
-            }
+        // get all rules that apply to the user and their groups
+        $rules = [];
+        foreach ($config as list($id, $pattern, $perm)) {
+            $perm = (int)$perm;
+            $rules[$perm] = $this->getIDPatterns($entities, $id, $pattern);
         }
 
-        return array_filter($extraLines);
+        // make a single regex per permission
+        foreach ($rules as $perm => $list) {
+            $rules[$perm] = '/^(' . join('|', $list) . '$/';
+        }
+
+        krsort($rules);
+        return $rules;
     }
 
     /**
-     * Returns as many rules as there are pattern matches
+     * Generates a list of encoded entities as they would be used in the ACL config file
      *
-     * @param string $pattern   Regex from config
-     * @param string $user      Current user's name
-     * @param array $properties User properties to check: username or groups
-     * @param string $line      Config line
+     * @param $user
+     * @param $groups
      * @return array
      */
-    protected function match($pattern, $user, $properties, $line)
+    public function createUserGroupEntities($user, $groups)
     {
-        $extras = [];
+        $user = auth_nameencode($user);
+        array_walk($groups, function (&$gr) {
+            $gr = '@' . auth_nameencode($gr);
+        });
+        $entities = (array)$groups;
+        $entities[] = $user;
+        return $entities;
+    }
 
-        // prepare the line to be added to ACLs if pattern actually matches: substitute username for the pattern already
-        $preparedLine = str_replace($pattern, auth_nameencode($user), $line);
+    /**
+     * Returns all ID patterns that match the given user entities
+     *
+     * @param string[] $entities List of username and groups
+     * @param string $id The pageID part of the config rule
+     * @param string $pattern The user pattern part of the config rule
+     * @return string[]
+     */
+    public function getIDPatterns($entities, $id, $pattern)
+    {
+        $result = [];
 
-        foreach ($properties as $property) {
+        foreach ($entities as $entity) {
+            $check = "$id\n$entity";
             $cnt = 0;
-            // build an extra ACL rule by replacing the placeholders/backreferences in prepared line with captured groups
-            $extra = preg_replace(
-                '!' . $pattern . '!',
-                $preparedLine,
-                $property,
-                1,
-                $cnt
-            );
-            // add the rule if anything was replaced
+
+            $match = preg_replace("/$pattern/s", $check, $entity, 1, $cnt);
             if ($cnt > 0) {
-                $extras[] = $extra;
+                $result[] = $this->patternToRegex(explode("\n", $match)[0]);
             }
         }
-        return $extras;
+
+        return $result;
     }
+
+    /**
+     * Replaces * and ** in IDs with their proper regex equivalents
+     *
+     * @param string $idpattern
+     * @return string
+     */
+    public function patternToRegex($idpattern)
+    {
+        return str_replace(
+            ['**', '*'],
+            [self::STARS, self::STAR],
+            $idpattern
+        );
+    }
+
+    /**
+     * @return string[][] a list of (id, pattern, perm)
+     */
+    protected function getConfiguration()
+    {
+        if (!is_file(self::CONFFILE)) {
+            msg('Configuration file for plugin aclplusregex was not found! Your ACLs might be incorrect.');
+            return [];
+        }
+
+        $config = [];
+        $file = file(self::CONFFILE);
+        foreach ($file as $line) {
+            $line = preg_replace('/#.*$/', '', $line); // strip comments
+            $line = trim($line);
+            if ($line === '') continue;
+            $config[] = preg_split('/[ \t]+/', $line, 3);
+        }
+
+        return $config;
+    }
+
 }

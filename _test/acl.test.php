@@ -57,6 +57,81 @@ class helper_plugin_aclplusregex_test extends DokuWikiTest
         ];
     }
 
+    public function patternIdProvider()
+    {
+        $entities = ['user_name', '@987654_matching', '@non-matching-group', '@123456_matching'];
+
+        return [
+            [
+                $entities,
+                'customers:$1:*',
+                '@(\d{6})_.*',
+                [
+                    'customers:987654:' . action_plugin_aclplusregex::STAR,
+                    'customers:123456:' . action_plugin_aclplusregex::STAR,
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @dataProvider patternIdProvider
+     */
+    public function testGetPatterns($entities, $id, $pattern, $expected)
+    {
+        /** @var action_plugin_aclplusregex $act */
+        $act = plugin_load('action', 'aclplusregex');
+
+        $this->assertEquals($expected, $act->getIDPatterns($entities, $id, $pattern));
+    }
+
+    public function idpatternProvider()
+    {
+        return [
+            [
+                'foo:bar:*', // pattern
+                ['foo:bar:baz'], // matches
+                ['foo', 'foo:bar:baz:bang'], // but not
+            ],
+
+            [
+                'foo:*:bang', // pattern
+                ['foo:bar:bang'], // matches
+                ['foo', 'foo:bar:baz:bang'], // but not
+            ],
+
+            [
+                'foo:*:bang:*', // pattern
+                ['foo:bar:bang:poff'], // matches
+                [
+                    'foo',
+                    'foo:bar:baz:bang',
+                    'foo:bar:bang:poff:huh',
+                ], // but not
+            ],
+        ];
+    }
+
+    /**
+     * @dataProvider idpatternProvider
+     */
+    public function testGetIDPatterns($pattern, $matches, $notmatches)
+    {
+        /** @var action_plugin_aclplusregex $act */
+        $act = plugin_load('action', 'aclplusregex');
+
+        $pattern = $act->patternToRegex($pattern);
+        $pattern = "/^$pattern$/"; // we anchor our patterns
+
+        foreach ($matches as $match) {
+            $this->assertRegExp($pattern, $match);
+        }
+
+        foreach ($notmatches as $notmatch) {
+            $this->assertNotRegExp($pattern, $notmatch);
+        }
+    }
+
     /**
      * Test extending ACLs with regex configuration
      *
@@ -68,6 +143,9 @@ class helper_plugin_aclplusregex_test extends DokuWikiTest
      */
     public function testACL($user, $groups, $extraAcl, $expected)
     {
+        $this->markTestSkipped('obsolete test, needs cleanup');
+        return;
+
         /** @var action_plugin_aclplusregex $act */
         $act = plugin_load('action', 'aclplusregex');
 
