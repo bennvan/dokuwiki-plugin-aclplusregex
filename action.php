@@ -81,7 +81,7 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
      * Load the custom ACL regexes for the given user
      *
      * @param string $user
-     * @param string $groups
+     * @param string[] $groups
      * @return array
      */
     public function loadACLRules($user, $groups)
@@ -93,23 +93,25 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
         $rules = [];
         foreach ($config as list($id, $pattern, $perm)) {
             $perm = (int)$perm;
-            $rules[$perm] = $this->getIDPatterns($entities, $id, $pattern);
+            $patterns = $this->getIDPatterns($entities, $id, $pattern);
+            foreach ($patterns as $pattern) {
+                // for the exactly same pattern, we only keep the highest permission
+                $rules[$pattern] = max($rules[$pattern] ?: AUTH_NONE, $perm);
+            }
+
         }
 
-        // make a single regex per permission
-        foreach ($rules as $perm => $list) {
-            $rules[$perm] = '/^(' . join('|', $list) . '$/';
-        }
+        // sort rules by significance
+        $rules = $this->sortRules($rules);
 
-        krsort($rules);
         return $rules;
     }
 
     /**
      * Generates a list of encoded entities as they would be used in the ACL config file
      *
-     * @param $user
-     * @param $groups
+     * @param string $user
+     * @param string[] $groups
      * @return array
      */
     public function createUserGroupEntities($user, $groups)
@@ -120,11 +122,12 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
         });
         $entities = (array)$groups;
         $entities[] = $user;
+        $entities[] = '@ALL'; // everyone is in this
         return $entities;
     }
 
     /**
-     * Returns all ID patterns that match the given user entities
+     * Returns all ID patterns that match the given user/group entities
      *
      * @param string[] $entities List of username and groups
      * @param string $id The pageID part of the config rule
@@ -139,9 +142,14 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
             $check = "$id\n$entity";
             $cnt = 0;
 
-            $match = preg_replace("/$pattern/s", $check, $entity, 1, $cnt);
+            // pattern not starting with @ should only match users
+            if($pattern[0] !== '@') {
+                $pattern = '(?!@)'.$pattern;
+            }
+
+            $match = preg_replace("/^$pattern$/m", $check, $entity, 1, $cnt);
             if ($cnt > 0) {
-                $result[] = $this->patternToRegex(explode("\n", $match)[0]);
+                $result[] = explode("\n", $match)[0];
             }
         }
 
@@ -168,7 +176,7 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
      */
     protected function getConfiguration()
     {
-        if (!is_file(self::CONFFILE)) {
+        if (!is_file(static::CONFFILE)) {
             msg(
                 'Configuration file for plugin aclplusregex was not found! Your ACLs might be incorrect.',
                 -1, '', '', MSG_ADMINS_ONLY
@@ -177,7 +185,7 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
         }
 
         $config = [];
-        $file = file(self::CONFFILE);
+        $file = file(static::CONFFILE);
         foreach ($file as $line) {
             $line = preg_replace('/#.*$/', '', $line); // strip comments
             $line = trim($line);
@@ -188,4 +196,52 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
         return $config;
     }
 
+    /**
+     * Sort the given rules so that the most significant ones come first
+     *
+     * @param array $rules
+     * @return array (rule => perm)
+     */
+    public function sortRules($rules)
+    {
+        uksort($rules, function ($a, $b) {
+            $partsA = explode(':', $a);
+            $countA = count($partsA);
+            $partsB = explode(':', $b);
+            $countB = count($partsB);
+
+            // more namespaces come first
+            if ($countA < $countB) {
+                return -1;
+            } elseif ($countA < $countB) {
+                return 1;
+            }
+
+            for ($i = 0; $i < $countA; $i++) {
+                $partA = $partsA[$i];
+                $partB = $partsB[$i];
+
+                // greedy placeholders go last
+                if ($partA === '**') return -1;
+                if ($partB === '**') return 1;
+
+                // nongreedy placeholders go second last
+                if ($partA === '*') return -1;
+                if ($partB === '*') return 1;
+
+                // sort by namespace length
+                $lenA = utf8_strlen($partA);
+                $lenB = utf8_strlen($partB);
+                if ($lenA < $lenB) {
+                    return -1;
+                } elseif ($lenA < $lenB) {
+                    return 1;
+                }
+            }
+
+            return strcmp($a, $b);
+        });
+
+        return $rules;
+    }
 }

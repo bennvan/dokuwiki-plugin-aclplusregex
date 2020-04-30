@@ -1,5 +1,7 @@
 <?php
 
+use dokuwiki\plugin\aclplusregex\test\TestAction;
+
 /**
  * Tests for the aclplusregex plugin
  *
@@ -120,7 +122,7 @@ class helper_plugin_aclplusregex_test extends DokuWikiTest
         /** @var action_plugin_aclplusregex $act */
         $act = plugin_load('action', 'aclplusregex');
 
-        $pattern = $act->patternToRegex($pattern);
+        $pattern = $act->patternToRegexGroup($pattern);
         $pattern = "/^$pattern$/"; // we anchor our patterns
 
         foreach ($matches as $match) {
@@ -152,5 +154,90 @@ class helper_plugin_aclplusregex_test extends DokuWikiTest
         $actual = $act->extendAcl($user, $groups, $extraAcl);
 
         $this->assertEquals($expected, $actual);
+    }
+
+    public function providerLoadACLRules()
+    {
+        return [
+            [ // user rule only for a J user
+              'john',
+              ['foo'],
+              ['users:j:john:**' => 16],
+            ],
+            [ // user rule only for a non-J user
+              'harry',
+              ['foo'],
+              ['users:j:harry:**' => 4],
+            ],
+            [ // J-User with a matching group
+              'john',
+              ['12345-doku-l2'],
+              [
+                  'users:j:john:**' => 16,
+                  'kunden:12345:intern:**' => 0,
+                  'kunden:12345:intern' => 0,
+                  'kunden:12345:**' => 2,
+              ],
+            ],
+            [ // J-User with two matching groups that result in overlapping rules
+              'john',
+              ['12345-doku-l2', '12345-doku-l3'],
+              [
+                  'users:j:john:**' => 16,
+                  'kunden:12345:intern:**' => 0,
+                  'kunden:12345:intern' => 0,
+                  'kunden:12345:**' => 16,
+              ],
+            ],
+        ];
+    }
+
+    /**
+     * Test loading ACL rules for different users
+     *
+     * Testing happens against _test/conf/aclplusregex.conf
+     *
+     * @dataProvider providerLoadACLRules
+     * @param string $user
+     * @param string[] $groups
+     * @param array $expect
+     */
+    public function testLoadACLRules($user, $groups, $expect)
+    {
+        $act = new TestAction();
+        $this->assertEquals($expect, $act->loadACLRules($user, $groups));
+    }
+
+    /**
+     * Test that rules are sorted correctly
+     */
+    public function testSortRules()
+    {
+        $act = new TestAction();
+
+        $this->assertEquals(
+            [
+                'this:has:three:four' => 1,
+                'this:has:three' => 1,
+                'aaaaaaaa:one' => 1,
+                'this:twoverylongthing' => 1,
+                'same:foo' => 1,
+                'same:*' => 1,
+                'same:**' => 1,
+                'aa' => 1,
+                'zz' => 1,
+            ],
+            $act->sortRules([
+                'this:has:three' => 1,
+                'this:twoverylongthing' => 1,
+                'this:has:three:four' => 1,
+                'same:**' => 1,
+                'same:*' => 1,
+                'same:foo' => 1,
+                'aaaaaaaa:one' => 1,
+                'zz' => 1,
+                'aa' => 1,
+            ])
+        );
     }
 }
