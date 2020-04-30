@@ -169,7 +169,10 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
     protected function getConfiguration()
     {
         if (!is_file(self::CONFFILE)) {
-            msg('Configuration file for plugin aclplusregex was not found! Your ACLs might be incorrect.');
+            msg(
+                'Configuration file for plugin aclplusregex was not found! Your ACLs might be incorrect.',
+                -1, '', '', MSG_ADMINS_ONLY
+            );
             return [];
         }
 
