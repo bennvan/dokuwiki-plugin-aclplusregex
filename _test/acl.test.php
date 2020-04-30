@@ -13,53 +13,82 @@ class helper_plugin_aclplusregex_test extends DokuWikiTest
     protected $pluginsEnabled = ['aclplusregex'];
 
     /**
-     * Test data
-     * [
-     *      user,
-     *      [user groups],
-     *      [plugin configuration lines],
-     *      [expected resulting ACLs]
-     * ]
-     *
      * @return array
+     * @see testFullChain
      */
-    public function dataACL()
+    public function providerFullChain()
     {
         return [
             [
-                'user_name',
-                [
-                    '987654_matching',
-                    'non-matching-group',
-                    '123456_matching',
-                ],
-                [
-                    'customers:$1:*	@(\d{6})_.*	4',
-                    'customers:$1:secret:*	@(\d{6})_.*	0',
-                ],
-                [
-                    'customers:987654:*	user%5fname	4',
-                    'customers:123456:*	user%5fname	4',
-                    'customers:987654:secret:*	user%5fname	0',
-                    'customers:123456:secret:*	user%5fname	0',
-                ],
+                'users:foo:bar',
+                'john',
+                ['foo', '12345-doku-l1'],
+                false,
             ],
             [
-                '123456_user',
-                [
-                    'non-matching-group',
-                ],
-                [
-                    'customers:$1:*	(\d{6})_.*	8',
-                ],
-                [
-                    'customers:123456:*	123456%5fuser	8',
-                ],
+                'users:j:john:my:page',
+                'john',
+                ['foo', '12345-doku-l1'],
+                16,
+            ],
+            [
+                'kunden:12345:nosecret',
+                'john',
+                ['foo', '12345-doku-l1'],
+                1,
+            ],
+            [
+                'kunden:12345:intern',
+                'john',
+                ['foo', '12345-doku-l1'],
+                0,
+            ],
+            [
+                'kunden:12345:intern:secret',
+                'john',
+                ['foo', '12345-doku-l1'],
+                0,
+            ],
+            [
+                'kunden:12345:intern:secret',
+                'james',
+                ['foo', '12345-doku-l1', '12345-doku-intern-l3'],
+                16,
             ],
         ];
     }
 
-    public function patternIdProvider()
+    /**
+     * Run a full check on the result our system should deliver for the given names
+     *
+     * Testing happens against _test/conf/aclplusregex.conf
+     *
+     * @dataProvider providerFullChain
+     * @param string $id
+     * @param string $user
+     * @param string[] $groups
+     * @param int|false $expected
+     */
+    public function testFullChain($id, $user, $groups, $expected)
+    {
+        $act = new TestAction();
+
+        $this->assertSame(
+            $expected,
+            $act->evaluateRegex(
+                $act->rulesToRegex(
+                    $act->loadACLRules($user, $groups)
+                ),
+                $id
+            )
+        );
+    }
+
+    /**
+     * @return array (entities, id, pattern, expected)
+     * @see testGetIdPatterns
+     */
+    public function providerGetIdPatterns()
     {
         $entities = ['user_name', '@987654_matching', '@non-matching-group', '@123456_matching'];
 
@@ -69,93 +98,44 @@ class helper_plugin_aclplusregex_test extends DokuWikiTest
                 'customers:$1:*',
                 '@(\d{6})_.*',
                 [
-                    'customers:987654:' . action_plugin_aclplusregex::STAR,
-                    'customers:123456:' . action_plugin_aclplusregex::STAR,
+                    'customers:987654:*',
+                    'customers:123456:*',
+                ],
+            ],
+            [
+                $entities,
+                'user:$1:**',
+                '(.*)',
+                [
+                    'user:user_name:**',
+                ],
+            ],
+            [
+                ['user name'], // clean the space in the name
+                'user:$1:**',
+                '(.*)',
+                [
+                    'user:user_name:**',
                 ],
             ],
         ];
     }
 
     /**
-     * @dataProvider patternIdProvider
+     * Test some individual patterns and users
+     *
+     * @dataProvider providerGetIdPatterns
      */
-    public function testGetPatterns($entities, $id, $pattern, $expected)
+    public function testGetIdPatterns($entities, $id, $pattern, $expected)
     {
-        /** @var action_plugin_aclplusregex $act */
-        $act = plugin_load('action', 'aclplusregex');
-
+        $act = new TestAction();
         $this->assertEquals($expected, $act->getIDPatterns($entities, $id, $pattern));
     }
 
-    public function idpatternProvider()
-    {
-        return [
-            [
-                'foo:bar:*', // pattern
-                ['foo:bar:baz'], // matches
-                ['foo', 'foo:bar:baz:bang'], // but not
-            ],
-
-            [
-                'foo:*:bang', // pattern
-                ['foo:bar:bang'], // matches
-                ['foo', 'foo:bar:baz:bang'], // but not
-            ],
-
-            [
-                'foo:*:bang:*', // pattern
-                ['foo:bar:bang:poff'], // matches
-                [
-                    'foo',
-                    'foo:bar:baz:bang',
-                    'foo:bar:bang:poff:huh',
-                ], // but not
-            ],
-        ];
-    }
-
     /**
-     * @dataProvider idpatternProvider
+     * @return array (user, groups, expect)
+     * @see testLoadACLRules
      */
-    public function testGetIDPatterns($pattern, $matches, $notmatches)
-    {
-        /** @var action_plugin_aclplusregex $act */
-        $act = plugin_load('action', 'aclplusregex');
-
-        $pattern = $act->patternToRegexGroup($pattern);
-        $pattern = "/^$pattern$/"; // we anchor our patterns
-
-        foreach ($matches as $match) {
-            $this->assertRegExp($pattern, $match);
-        }
-
-        foreach ($notmatches as $notmatch) {
-            $this->assertNotRegExp($pattern, $notmatch);
-        }
-    }
-
-    /**
-     * Test extending ACLs with regex configuration
-     *
-     * @dataProvider dataACL
-     * @param string $user
-     * @param array $groups
-     * @param array $extraAcl
-     * @param array $expected
-     */
-    public function testACL($user, $groups, $extraAcl, $expected)
-    {
-        $this->markTestSkipped('obsolete test, needs cleanup');
-        return;
-
-        /** @var action_plugin_aclplusregex $act */
-        $act = plugin_load('action', 'aclplusregex');
-
-        $actual = $act->extendAcl($user, $groups, $extraAcl);
-
-        $this->assertEquals($expected, $actual);
-    }
-
     public function providerLoadACLRules()
     {
         return [
@@ -189,6 +169,11 @@ class helper_plugin_aclplusregex_test extends DokuWikiTest
                   'kunden:12345:**' => 16,
               ],
             ],
+            [ // user rule with a fancy user name
+              'Harry Belafonte',
+              ['foo'],
+              ['users:j:harry_belafonte:**' => 4],
+            ],
         ];
     }
 
@@ -209,35 +194,100 @@ class helper_plugin_aclplusregex_test extends DokuWikiTest
     }
 
     /**
-     * Test that rules are sorted correctly
+     * @return array (rules, expect)
+     * @see testSortRules
      */
-    public function testSortRules()
+    public function providerSortRules()
+    {
+        return [
+            [
+                [
+                    'this:is:longer' => 1,
+                    'this:is:longer:even' => 1,
+                    'this:short' => 1,
+                    'this' => 1,
+                ],
+                [
+                    'this:is:longer:even' => 1,
+                    'this:is:longer' => 1,
+                    'this:short' => 1,
+                    'this' => 1,
+                ],
+            ],
+            [
+                [
+                    'kunden:12345:intern:**' => 1,
+                    'kunden:12345:**' => 1,
+                    'kunden:12345:intern' => 1,
+                ],
+                [
+                    'kunden:12345:intern' => 1,
+                    'kunden:12345:intern:**' => 1,
+                    'kunden:12345:**' => 1,
+                ],
+            ],
+            [
+                [
+                    'this:has:three' => 1,
+                    'this:twoverylongthing' => 1,
+                    'this:has:three:four' => 1,
+                    'same:**' => 1,
+                    'same:*' => 1,
+                    'same:foo' => 1,
+                    'aaaaaaaa:one' => 1,
+                    'zz' => 1,
+                    'aa' => 1,
+                ],
+                [
+                    'aa' => 1,
+                    'aaaaaaaa:one' => 1,
+                    'same:foo' => 1,
+                    'same:*' => 1,
+                    'same:**' => 1,
+                    'this:has:three:four' => 1,
+                    'this:has:three' => 1,
+                    'this:twoverylongthing' => 1,
+                    'zz' => 1,
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Test that rules are sorted correctly
+     *
+     * @dataProvider providerSortRules
+     * @param array $rules
+     * @param array $expect
+     */
+    public function testSortRules($rules, $expect)
     {
         $act = new TestAction();
 
-        $this->assertEquals(
-            [
-                'this:has:three:four' => 1,
-                'this:has:three' => 1,
-                'aaaaaaaa:one' => 1,
-                'this:twoverylongthing' => 1,
-                'same:foo' => 1,
-                'same:*' => 1,
-                'same:**' => 1,
-                'aa' => 1,
-                'zz' => 1,
-            ],
-            $act->sortRules([
-                'this:has:three' => 1,
-                'this:twoverylongthing' => 1,
-                'this:has:three:four' => 1,
-                'same:**' => 1,
-                'same:*' => 1,
-                'same:foo' => 1,
-                'aaaaaaaa:one' => 1,
-                'zz' => 1,
-                'aa' => 1,
-            ])
+        $this->assertSame(
+            $expect,
+            $act->sortRules($rules)
         );
+    }
+
+    public function testPatternToRegexGroup()
+    {
+        $acl = new TestAction();
+
+        $this->assertEquals(
+            '(?<g0x4>foo:' . TestAction::STARS . ')',
+            $acl->patternToRegexGroup('foo:**', 4)
+        );
+
+        $this->assertEquals(
+            '(?<g1x4>foo:' . TestAction::STAR . ')',
+            $acl->patternToRegexGroup('foo:*', 4)
+        );
+
+        $this->assertEquals(
+            '(?<g2x4>foo:' . TestAction::STAR . ':' . TestAction::STARS . ')',
+            $acl->patternToRegexGroup('foo:*:**', 4)
+        );
+
     }
 }

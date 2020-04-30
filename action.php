@@ -16,6 +16,9 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
     /** @var array we store the regexes per user here */
     protected $ruleCache = [];
 
+    /** @var int used to uniquely name capture groups */
+    protected $counter = 0;
+
     /**
      * Registers a callback function for a given event
      *
@@ -30,8 +33,7 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
     }
 
     /**
-     * Manipulates global $AUTH_ACL based on regex in plugin configuration
-     * and adds rules if the current user matches a pattern.
+     * Apply our own acl checking mechanism
      *
      * @param Doku_Event $event event object by reference
      * @param string $mode BEFORE|AFTER
@@ -47,34 +49,48 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
 
         // use cached user rules or fetch new ones if not available
         if (!isset($this->ruleCache[$user])) {
-            $this->ruleCache[$user] = $this->loadACLRules($user, $groups);
+            $this->ruleCache[$user] = $this->rulesToRegex($this->loadACLRules($user, $groups));
         }
 
-        // only apply rules that would result in higher permission
+        // apply the rules and use the resulting permission
         $previous = $event->result ?: AUTH_NONE;
-        $rules = array_filter(
-            $this->ruleCache[$user],
-            function ($key) use ($previous) {
-                return $key > $previous;
-            },
-            ARRAY_FILTER_USE_KEY
-        );
+        $permisson = $this->evaluateRegex($this->ruleCache[$user], $id);
+        if ($permisson !== false) {
+            $event->result = max($previous, $permisson);
 
-        // see if we have a matching rule
-        $result = false;
-        foreach ($rules as $perm => $rule) {
-            if (preg_match($rule, $id)) {
-                $result = $perm;
-                break;
+            // in BEFORE mode also prevent additional checks
+            if ($mode === 'BEFORE') {
+                $event->preventDefault();
             }
         }
+    }
 
-        // in before mode, abort checking if we found any result
-        if ($mode === 'BEFORE' && $result !== false) {
-            $event->preventDefault();
+    /**
+     * Applies the given regular expression to the ID and returns the resulting permission
+     *
+     * Important: there's a difference between a return value of 0 = AUTH_NONE and false = no match found
+     *
+     * @param string $regex
+     * @param string $id
+     * @return false|int
+     */
+    protected function evaluateRegex($regex, $id)
+    {
+        if (!preg_match($regex, $id, $matches)) {
+            // no rule matches
+            return false;
         }
 
-        $event->result = $result;
+        // now figure out which group matched
+        foreach ($matches as $key => $match) {
+            if (!is_string($key)) continue; // we only care bout named groups
+            if ($match === '') continue; // this one didn't match
+
+            list(, $perm) = explode('x', $key); // the part after the x is our permission
+            return (int)$perm;
+        }
+
+        return false; //shouldn't never be reached
     }
 
     /**
@@ -84,7 +100,7 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
      * @param string[] $groups
      * @return array
      */
-    public function loadACLRules($user, $groups)
+    protected function loadACLRules($user, $groups)
     {
         $entities = $this->createUserGroupEntities($user, $groups);
         $config = $this->getConfiguration();
@@ -108,17 +124,32 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
     }
 
     /**
-     * Generates a list of encoded entities as they would be used in the ACL config file
+     * Convert the list of rules to a single regular expression
+     *
+     * @param array $rules
+     * @return string
+     */
+    protected function rulesToRegex($rules)
+    {
+        $reGroup = [];
+        foreach ($rules as $rule => $perm) {
+            $reGroup[] = $this->patternToRegexGroup($rule, $perm);
+        }
+
+        return '/^(' . join('|', $reGroup) . ')$/';
+    }
+
+    /**
+     * Combines the user and group info in prefixed entities
      *
      * @param string $user
      * @param string[] $groups
      * @return array
      */
-    public function createUserGroupEntities($user, $groups)
+    protected function createUserGroupEntities($user, $groups)
     {
-        $user = auth_nameencode($user);
         array_walk($groups, function (&$gr) {
-            $gr = '@' . auth_nameencode($gr);
+            $gr = '@' . $gr;
         });
         $entities = (array)$groups;
         $entities[] = $user;
@@ -134,7 +165,7 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
      * @param string $pattern The user pattern part of the config rule
      * @return string[]
      */
-    public function getIDPatterns($entities, $id, $pattern)
+    protected function getIDPatterns($entities, $id, $pattern)
     {
         $result = [];
 
@@ -143,13 +174,14 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
             $cnt = 0;
 
             // pattern not starting with @ should only match users
-            if($pattern[0] !== '@') {
-                $pattern = '(?!@)'.$pattern;
+            if ($pattern[0] !== '@') {
+                $pattern = '(?!@)' . $pattern;
             }
 
+            // this does a match on the pattern and replaces backreferences at the same time
             $match = preg_replace("/^$pattern$/m", $check, $entity, 1, $cnt);
             if ($cnt > 0) {
-                $result[] = explode("\n", $match)[0];
+                $result[] = $this->cleanID(explode("\n", $match)[0]);
             }
         }
 
@@ -157,18 +189,27 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
     }
 
     /**
-     * Replaces * and ** in IDs with their proper regex equivalents
+     * Replaces * and ** in IDs with their proper regex equivalents and returns a named
+     * group which's name encodes the permission
      *
      * @param string $idpattern
+     * @param int $perm
      * @return string
      */
-    public function patternToRegex($idpattern)
+    protected function patternToRegexGroup($idpattern, $perm)
     {
-        return str_replace(
-            ['**', '*'],
-            [self::STARS, self::STAR],
-            $idpattern
+        $idpattern = strtr(
+            $idpattern,
+            [
+                '**' => self::STARS,
+                '*' => self::STAR,
+            ]
         );
+
+        // we abuse named groups to know the for the rule later
+        $name = 'g' . ($this->counter++) . 'x' . $perm;
+
+        return '(?<' . $name . '>' . $idpattern . ')';
     }
 
     /**
@@ -190,7 +231,7 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
             $line = preg_replace('/#.*$/', '', $line); // strip comments
             $line = trim($line);
             if ($line === '') continue;
-            $config[] = preg_split('/[ \t]+/', $line, 3);
+            $config[] = array_map('rawurldecode', preg_split('/[ \t]+/', $line, 3)); // config is encoded
         }
 
         return $config;
@@ -202,7 +243,7 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
      * @param array $rules
      * @return array (rule => perm)
      */
-    public function sortRules($rules)
+    protected function sortRules($rules)
     {
         uksort($rules, function ($a, $b) {
             $partsA = explode(':', $a);
@@ -210,38 +251,52 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
             $partsB = explode(':', $b);
             $countB = count($partsB);
 
-            // more namespaces come first
-            if ($countA < $countB) {
-                return -1;
-            } elseif ($countA < $countB) {
-                return 1;
-            }
+            for ($i = 0; $i < max($countA, $countB); $i++) {
+                // fill up missing parts with low prio markers
+                $partA = $partsA[$i] ?: '**';
+                $partB = $partsB[$i] ?: '**';
 
-            for ($i = 0; $i < $countA; $i++) {
-                $partA = $partsA[$i];
-                $partB = $partsB[$i];
+                // if both parts are the same, move on
+                if ($partA === $partB) continue;
 
                 // greedy placeholders go last
-                if ($partA === '**') return -1;
-                if ($partB === '**') return 1;
+                if ($partA === '**') return 1;
+                if ($partB === '**') return -1;
 
                 // nongreedy placeholders go second last
-                if ($partA === '*') return -1;
-                if ($partB === '*') return 1;
+                if ($partA === '*') return 1;
+                if ($partB === '*') return -1;
 
-                // sort by namespace length
-                $lenA = utf8_strlen($partA);
-                $lenB = utf8_strlen($partB);
-                if ($lenA < $lenB) {
-                    return -1;
-                } elseif ($lenA < $lenB) {
-                    return 1;
-                }
+                // just compare alphabetically
+                return strcmp($a, $b);
             }
 
+            // probably never reached
             return strcmp($a, $b);
         });
 
         return $rules;
+    }
+
+    /**
+     * Applies cleanID to each separate part of the ID
+     *
+     * keeps * and ** placeholders
+     *
+     * @param string $id
+     * @return string
+     * @see \cleanID()
+     */
+    protected function cleanID($id)
+    {
+        $parts = explode(':', $id);
+        $count = count($parts);
+        for ($i = 0; $i < $count; $i++) {
+            if ($parts[$i] == '**') continue;
+            if ($parts[$i] == '*') continue;
+            $parts[$i] = cleanID($parts[$i]);
+            if ($parts[$i] === '') unset($parts[$i]);
+        }
+        return join(':', $parts);
     }
 }
