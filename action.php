@@ -43,20 +43,34 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
         $user = $event->data['user'];
         $groups = $event->data['groups'];
 
-        if(!isset($this->ruleCache[$user])) {
+        if ($user === '') return;
+
+        // use cached user rules or fetch new ones if not available
+        if (!isset($this->ruleCache[$user])) {
             $this->ruleCache[$user] = $this->loadACLRules($user, $groups);
         }
 
-        $result = AUTH_NONE;
+        // only apply rules that would result in higher permission
+        $previous = $event->result ?: AUTH_NONE;
+        $rules = array_filter(
+            $this->ruleCache[$user],
+            function ($key) use ($previous) {
+                return $key > $previous;
+            },
+            ARRAY_FILTER_USE_KEY
+        );
 
-        foreach ($this->loadACLRules($user, $groups) as $perm => $rule) {
-            if(preg_match($rule, $id)) {
+        // see if we have a matching rule
+        $result = false;
+        foreach ($rules as $perm => $rule) {
+            if (preg_match($rule, $id)) {
                 $result = $perm;
                 break;
             }
         }
 
-        if($mode === 'BEFORE') {
+        // in before mode, abort checking if we found any result
+        if ($mode === 'BEFORE' && $result !== false) {
             $event->preventDefault();
         }
 
