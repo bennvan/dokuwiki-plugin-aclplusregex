@@ -2,8 +2,24 @@
 /**
  * DokuWiki Plugin aclplusregex (Action Component)
  *
+ * Here is how it works:
+ *
+ * 1) load the configuration
+ * 2) for each line apply the user/group regex to the users login and groups
+ *    this also resolves backreferences in the ID part of the line
+ * 3) for all matched lines where the resolved ID part is exactly the same, keep only the
+ *    one with the maximum permissions
+ * 4) sort the remaining lines in a way that the most significant IDs come first, with all
+ *    placeholders having the lowest priority
+ * 5) transform placeholders in their regex equivalents and put each into a named regex
+ *    group that has the resulting permission in it's name
+ * 6) combine all groups in a single regular expression (most significant is first)
+ * 7) cache result of step 1 to 7 in the singleton class
+ * 8) apply the regex on the current ID
+ * 9) if it matches, check which named group has the match and extract the permission from it
+ * 10a) in BEFORE mode use that permission and stop processing
+ * 10b) in AFTER mode apply the permission if it's higher than what DokuWiki decided
  */
-
 class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
 {
     const CONFFILE = DOKU_CONF . 'aclplusregex.conf';
