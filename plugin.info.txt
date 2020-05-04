@@ -1,7 +1,7 @@
 base   aclplusregex
 author Anna Dabrowska
 email  dokuwiki@cosmocode.de
-date   2020-04-02
+date   2020-05-04
 name   aclplusregex plugin
 desc   Show group membership and other user data in an overview table
 url    https://www.dokuwiki.org/plugin:aclplusregex
