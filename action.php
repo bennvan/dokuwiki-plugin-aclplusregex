@@ -1,4 +1,5 @@
 <?php
+
 /**
  * DokuWiki Plugin aclplusregex (Action Component)
  *
@@ -62,6 +63,7 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
         $groups = $event->data['groups'];
 
         if ($user === '') return;
+        if (auth_isadmin($user)) return;
 
         // use cached user rules or fetch new ones if not available
         if (!isset($this->ruleCache[$user])) {
@@ -234,10 +236,6 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
     protected function getConfiguration()
     {
         if (!is_file(static::CONFFILE)) {
-            msg(
-                'Configuration file for plugin aclplusregex was not found! Your ACLs might be incorrect.',
-                -1, '', '', MSG_ADMINS_ONLY
-            );
             return [];
         }
 
