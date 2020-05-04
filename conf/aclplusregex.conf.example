@@ -1,1 +1,4 @@
+# Please note that the same encoding rules for user and group names should be used as in the original ACL
+# setup. You can get mostly away with not encoding, but you need to do it for spaces at least!
+
 test:area:$1:*	@(\d{6})_.*	4
