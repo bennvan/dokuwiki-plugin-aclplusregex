@@ -295,7 +295,8 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
     /**
      * Applies cleanID to each separate part of the ID
      *
-     * keeps * and ** placeholders
+     * Keeps * and ** placeholders, as well as parts containing
+     * regular expressions
      *
      * @param string $id
      * @return string
@@ -308,9 +309,24 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
         for ($i = 0; $i < $count; $i++) {
             if ($parts[$i] == '**') continue;
             if ($parts[$i] == '*') continue;
+            if ($this->containsRegex($parts[$i])) continue;
+
             $parts[$i] = cleanID($parts[$i]);
             if ($parts[$i] === '') unset($parts[$i]);
         }
         return join(':', $parts);
+    }
+
+    /**
+     * Detect if a string contains a regular expression
+     * by the presence of parentheses
+     *
+     * @param $part
+     * @return bool
+     */
+    protected function containsRegex($part)
+    {
+        return strpos($part, '(') !== false &&
+            strpos($part, ')') !== false;
     }
 }
