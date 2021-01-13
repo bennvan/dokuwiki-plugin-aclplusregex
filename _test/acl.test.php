@@ -316,6 +316,18 @@ class helper_plugin_aclplusregex_test extends DokuWikiTest
                     'zz' => 1,
                 ],
             ],
+            [
+                [
+                    'reg:12345:(sub-\d{3}):sub' => 1,
+                    'reg:12345:(sub-\d{3}):*' => 1,
+                    'reg:12345:sub-678:bus' => 1,
+                ],
+                [
+                    'reg:12345:sub-678:bus' => 1,
+                    'reg:12345:(sub-\d{3}):sub' => 1,
+                    'reg:12345:(sub-\d{3}):*' => 1,
+                ],
+            ],
         ];
     }
 
