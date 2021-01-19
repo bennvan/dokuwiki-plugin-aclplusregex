@@ -85,6 +85,72 @@ class helper_plugin_aclplusregex_test extends DokuWikiTest
     }
 
     /**
+     * @return array
+     * @see testFullChainNsRegex
+     */
+    public function providerFullChainNsRegex()
+    {
+        return [
+            [
+                'reg:12345:678:sub',
+                'joshua',
+                ['foo', '12345-doku-sub-r1'],
+                4,
+            ],
+            [
+                'reg:12345:sub-678:sub',
+                'joshua',
+                ['foo', '12345-doku-bus-sub-r2'],
+                16,
+            ],
+            [
+                'reg:12345:sub-678:bus',
+                'joshua',
+                ['foo', '12345-doku-bus-sub-r2'],
+                2,
+            ],
+            [
+                'reg:12345:sub-90:sub',
+                'joshua',
+                ['foo', '12345-doku-bus-sub-r3'],
+                8,
+            ],
+            [
+                'reg:12345:sub-90:bus',
+                'joshua',
+                ['foo', '12345-doku-bus-sub-r3'],
+                1,
+            ],
+        ];
+    }
+
+    /**
+     * Run a full check on the result our system should deliver for the given names
+     *
+     * Testing happens against _test/conf/aclplusregex.conf
+     *
+     * @dataProvider providerFullChainNsRegex
+     * @param string $id
+     * @param string $user
+     * @param string[] $groups
+     * @param int|false $expected
+     */
+    public function testFullChainNsRegex($id, $user, $groups, $expected)
+    {
+        $act = new TestAction();
+
+        $this->assertSame(
+            $expected,
+            $act->evaluateRegex(
+                $act->rulesToRegex(
+                    $act->loadACLRules($user, $groups)
+                ),
+                $id
+            )
+        );
+    }
+
+    /**
      * @return array (entities, id, pattern, expected)
      * @see testGetIdPatterns
      */
@@ -248,6 +314,18 @@ class helper_plugin_aclplusregex_test extends DokuWikiTest
                     'this:has:three' => 1,
                     'this:twoverylongthing' => 1,
                     'zz' => 1,
+                ],
+            ],
+            [
+                [
+                    'reg:12345:(sub-\d{3}):sub' => 1,
+                    'reg:12345:(sub-\d{3}):*' => 1,
+                    'reg:12345:sub-678:bus' => 1,
+                ],
+                [
+                    'reg:12345:sub-678:bus' => 1,
+                    'reg:12345:(sub-\d{3}):sub' => 1,
+                    'reg:12345:(sub-\d{3}):*' => 1,
                 ],
             ],
         ];
