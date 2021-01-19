@@ -281,9 +281,9 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
                 if ($partA === '*') return 1;
                 if ($partB === '*') return -1;
 
-                // regex goes after what matches it
-                if ($this->containsRegex($partA) && preg_match("/$partA/", $partB)) return 1;
-                if ($this->containsRegex($partB) && preg_match("/$partB/", $partA)) return -1;
+                // regex goes after simple strings
+                if ($this->containsRegex($partA) && !$this->containsRegex($partB)) return 1;
+                if ($this->containsRegex($partB) && !$this->containsRegex($partA)) return -1;
 
                 // just compare alphabetically
                 return strcmp($a, $b);
