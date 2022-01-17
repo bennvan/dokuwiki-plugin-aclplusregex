@@ -62,7 +62,6 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
         $user = $event->data['user'];
         $groups = $event->data['groups'];
 
-        if ($user === '') return;
         if (auth_isadmin($user)) return;
 
         // use cached user rules or fetch new ones if not available
