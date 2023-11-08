@@ -1,4 +1,3 @@
 <?php
 
-
 $conf['run'] = 'AFTER';
