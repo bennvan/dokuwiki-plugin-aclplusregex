@@ -1,5 +1,9 @@
 <?php
 
+use dokuwiki\Extension\ActionPlugin;
+use dokuwiki\Extension\EventHandler;
+use dokuwiki\Extension\Event;
+
 /**
  * DokuWiki Plugin aclplusregex (Action Component)
  *
@@ -21,14 +25,14 @@
  * 10a) in BEFORE mode use that permission and stop processing
  * 10b) in AFTER mode apply the permission if it's higher than what DokuWiki decided
  */
-class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
+class action_plugin_aclplusregex extends ActionPlugin
 {
-    const CONFFILE = DOKU_CONF . 'aclplusregex.conf';
+    public const CONFFILE = DOKU_CONF . 'aclplusregex.conf';
 
     /** @var string Regex for the * placeholder */
-    const STAR = '[^:]+';
+    public const STAR = '[^:]+';
     /** @var string Regex for the ** placeholder */
-    const STARS = '[^:]+(:[^:]+)*';
+    public const STARS = '[^:]+(:[^:]+)*';
 
     /** @var array we store the regexes per user here */
     protected $ruleCache = [];
@@ -42,11 +46,10 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
      * @param Doku_Event_Handler $controller DokuWiki's event controller object
      * @return void
      */
-    public function register(Doku_Event_Handler $controller)
+    public function register(EventHandler $controller)
     {
         $mode = $this->getConf('run');
         $controller->register_hook('AUTH_ACL_CHECK', $mode, $this, 'handle_acl', $mode);
-
     }
 
     /**
@@ -56,7 +59,7 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
      * @param string $mode BEFORE|AFTER
      * @return void
      */
-    public function handle_acl(Doku_Event $event, $mode)
+    public function handle_acl(Event $event, $mode)
     {
         $id = $event->data['id'];
         $user = $event->data['user'];
@@ -104,7 +107,7 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
             if (!is_string($key)) continue; // we only care bout named groups
             if ($match === '') continue; // this one didn't match
 
-            list(, $perm) = explode('x', $key); // the part after the x is our permission
+            [, $perm] = explode('x', $key); // the part after the x is our permission
             return (int)$perm;
         }
 
@@ -125,14 +128,13 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
 
         // get all rules that apply to the user and their groups
         $rules = [];
-        foreach ($config as list($id, $pattern, $perm)) {
+        foreach ($config as [$id, $pattern, $perm]) {
             $perm = (int)$perm;
             $patterns = $this->getIDPatterns($entities, $id, $pattern);
             foreach ($patterns as $pattern) {
                 // for the exactly same pattern, we only keep the highest permission
                 $rules[$pattern] = max($rules[$pattern] ?? AUTH_NONE, $perm);
             }
-
         }
 
         // sort rules by significance
@@ -154,7 +156,7 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
             $reGroup[] = $this->patternToRegexGroup($rule, $perm);
         }
 
-        return '/^(' . join('|', $reGroup) . ')$/';
+        return '/^(' . implode('|', $reGroup) . ')$/';
     }
 
     /**
@@ -318,7 +320,7 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
             $parts[$i] = cleanID($parts[$i]);
             if ($parts[$i] === '') unset($parts[$i]);
         }
-        return join(':', $parts);
+        return implode(':', $parts);
     }
 
     /**
