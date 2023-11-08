@@ -49,7 +49,7 @@ class action_plugin_aclplusregex extends ActionPlugin
     public function register(EventHandler $controller)
     {
         $mode = $this->getConf('run');
-        $controller->register_hook('AUTH_ACL_CHECK', $mode, $this, 'handle_acl', $mode);
+        $controller->register_hook('AUTH_ACL_CHECK', $mode, $this, 'handleAcl', $mode);
     }
 
     /**
@@ -59,7 +59,7 @@ class action_plugin_aclplusregex extends ActionPlugin
      * @param string $mode BEFORE|AFTER
      * @return void
      */
-    public function handle_acl(Event $event, $mode)
+    public function handleAcl(Doku_Event $event, $mode)
     {
         $id = $event->data['id'];
         $user = $event->data['user'];
