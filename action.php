@@ -130,7 +130,7 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
             $patterns = $this->getIDPatterns($entities, $id, $pattern);
             foreach ($patterns as $pattern) {
                 // for the exactly same pattern, we only keep the highest permission
-                $rules[$pattern] = max($rules[$pattern] ?: AUTH_NONE, $perm);
+                $rules[$pattern] = max($rules[$pattern] ?? AUTH_NONE, $perm);
             }
 
         }
@@ -267,8 +267,8 @@ class action_plugin_aclplusregex extends DokuWiki_Action_Plugin
 
             for ($i = 0; $i < max($countA, $countB); $i++) {
                 // fill up missing parts with low prio markers
-                $partA = $partsA[$i] ?: '**';
-                $partB = $partsB[$i] ?: '**';
+                $partA = $partsA[$i] ?? '**';
+                $partB = $partsB[$i] ?? '**';
 
                 // if both parts are the same, move on
                 if ($partA === $partB) continue;
