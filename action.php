@@ -43,7 +43,7 @@ class action_plugin_aclplusregex extends ActionPlugin
     /**
      * Registers a callback function for a given event
      *
-     * @param Doku_Event_Handler $controller DokuWiki's event controller object
+     * @param EventHandler $controller DokuWiki's event controller object
      * @return void
      */
     public function register(EventHandler $controller)
