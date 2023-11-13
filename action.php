@@ -55,11 +55,11 @@ class action_plugin_aclplusregex extends ActionPlugin
     /**
      * Apply our own acl checking mechanism
      *
-     * @param Doku_Event $event event object by reference
+     * @param Event $event event object by reference
      * @param string $mode BEFORE|AFTER
      * @return void
      */
-    public function handleAcl(Doku_Event $event, $mode)
+    public function handleAcl(Event $event, $mode)
     {
         $id = $event->data['id'];
         $user = $event->data['user'];
