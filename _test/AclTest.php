@@ -1,6 +1,6 @@
 <?php
 
-use dokuwiki\plugin\aclplusregex\test\TestAction;
+namespace dokuwiki\plugin\aclplusregex\test;
 
 /**
  * Tests for the aclplusregex plugin
@@ -8,7 +8,7 @@ use dokuwiki\plugin\aclplusregex\test\TestAction;
  * @group plugin_aclplusregex
  * @group plugins
  */
-class helper_plugin_aclplusregex_test extends DokuWikiTest
+class AclTest extends \DokuWikiTest
 {
     protected $pluginsEnabled = ['aclplusregex'];
 
