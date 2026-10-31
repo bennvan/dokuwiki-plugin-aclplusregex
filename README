@@ -5,6 +5,11 @@ Dynamically extend DokuWiki ACLs based on regular expressions
 All documentation for this plugin can be found at
 https://www.dokuwiki.org/plugin:aclplusregex
 
+By default, regex ACL rules apply only to logged-in users. Enable the
+"anonymous" setting to also apply them to logged-out visitors. These visitors
+have an empty username and match @ALL rules. The BEFORE/AFTER setting still
+controls how these rules interact with DokuWiki's standard ACLs.
+
 If you install this plugin manually, make sure it is installed in
 lib/plugins/aclplusregex/ - if the folder is called different it
 will not work!

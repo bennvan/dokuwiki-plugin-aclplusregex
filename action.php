@@ -65,7 +65,7 @@ class action_plugin_aclplusregex extends ActionPlugin
         $user = $event->data['user'];
         $groups = $event->data['groups'];
 
-        if ($user === '') return;
+        if ($user === '' && !$this->getConf('anonymous')) return;
         if (auth_isadmin($user)) return;
 
         // use cached user rules or fetch new ones if not available
@@ -118,7 +118,7 @@ class action_plugin_aclplusregex extends ActionPlugin
      * Load the custom ACL regexes for the given user
      *
      * @param string $user
-     * @param string[] $groups
+     * @param string[]|null $groups
      * @return array
      */
     protected function loadACLRules($user, $groups)
@@ -163,15 +163,15 @@ class action_plugin_aclplusregex extends ActionPlugin
      * Combines the user and group info in prefixed entities
      *
      * @param string $user
-     * @param string[] $groups
+     * @param string[]|null $groups
      * @return array
      */
     protected function createUserGroupEntities($user, $groups)
     {
-        array_walk($groups, function (&$gr) {
+        $entities = (array)$groups;
+        array_walk($entities, function (&$gr) {
             $gr = '@' . $gr;
         });
-        $entities = (array)$groups;
         $entities[] = $user;
         $entities[] = '@ALL'; // everyone is in this
         return $entities;
